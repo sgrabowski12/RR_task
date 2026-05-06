@@ -1,0 +1,127 @@
+---
+title: "report"
+format: html
+editor: visual
+---
+
+```{r, results='hide'}
+library(readxl)
+library(readr)
+library(dplyr)
+library(ggplot2)
+library(knitr)
+
+raw_data <- read_excel(
+  "data/breaking_bad_raw.xlsx",
+  sheet = "Arkusz1",
+  col_names = FALSE
+)
+
+viewership <- raw_data |>
+  select(
+    overall_episode_raw = 1,
+    episode_raw = 2,
+    title = 3,
+    viewers_raw = 7
+  ) |>
+  mutate(
+    overall_episode = suppressWarnings(as.numeric(overall_episode_raw)),
+    episode = suppressWarnings(as.numeric(episode_raw))
+  ) |>
+  filter(!is.na(overall_episode)) |>
+  mutate(
+    season = case_when(
+      overall_episode <= 7 ~ 1,
+      overall_episode <= 20 ~ 2,
+      overall_episode <= 33 ~ 3,
+      overall_episode <= 46 ~ 4,
+      TRUE ~ 5
+    ),
+    viewers_millions = parse_number(as.character(viewers_raw)),
+    change_from_previous_episode = viewers_millions - lag(viewers_millions)
+  ) |>
+  select(
+    overall_episode,
+    season,
+    episode,
+    title,
+    viewers_millions,
+    change_from_previous_episode
+  )
+
+season_summary <- viewership |>
+  group_by(season) |>
+  summarise(
+    episodes = n(),
+    average_viewers = mean(viewers_millions),
+    min_viewers = min(viewers_millions),
+    max_viewers = max(viewers_millions),
+    .groups = "drop"
+  ) |>
+  mutate(
+    change_from_previous = average_viewers - lag(average_viewers)
+  )
+
+highest_episode <- viewership |>
+  slice_max(viewers_millions, n = 1)
+
+lowest_episode <- viewership |>
+  slice_min(viewers_millions, n = 1)
+
+season1_avg <- season_summary$average_viewers[season_summary$season == 1]
+season3_avg <- season_summary$average_viewers[season_summary$season == 3]
+season5_avg <- season_summary$average_viewers[season_summary$season == 5]
+
+change_s3_s5 <- season5_avg - season3_avg
+
+finale <- viewership |>
+  slice_max(overall_episode, n = 1)
+```
+
+# Overview
+
+\*Breaking Bad\* is an American television drama series created by Vince Gilligan for AMC. The series follows Walter White, a chemistry teacher from Albuquerque, New Mexico, who turns to producing methamphetamine after being diagnosed with lung cancer.\
+
+```{r}
+knitr::include_graphics("BBphoto.png")
+
+```
+
+\
+The viewership data used in this report was copied from the Wikipedia page “List of \*Breaking Bad\* episodes”. The original column is titled “U.S. viewers (millions)”.
+
+# Viewership by episode
+
+```{r}
+ggplot(viewership, aes(x = overall_episode, y = viewers_millions)) +
+  geom_col() +
+  labs(
+    title = "Breaking Bad: Viewership by episode",
+    subtitle = "U.S. viewers for each episode, in millions",
+    x = "Episode number",
+    y = "Viewers in millions"
+  ) +
+  theme_minimal(base_size = 13)
+```
+
+# Season-to-season changes
+
+```{r}
+season_changes <- season_summary |>
+  filter(!is.na(change_from_previous))
+
+ggplot(season_changes, aes(x = factor(season), y = change_from_previous)) +
+  geom_col() +
+  geom_hline(yintercept = 0, linewidth = 0.8) +
+  labs(
+    title = "Season-to-season change in average viewership",
+    subtitle = "Difference compared with the previous season",
+    x = "Season",
+    y = "Change in average viewers, in millions"
+  ) +
+  theme_minimal(base_size = 13)
+```
+
+# Interpretation
+
+*Breaking Bad* experienced one of the most dramatic audience increases in modern television. The first two seasons drew relatively small but steady viewership, usually around one to one and a half million viewers per episode. As critical acclaim grew, Seasons 3 and 4 showed a clear upward trend, with episodes approaching two to two and a half million viewers. The real breakthrough came with Season 5, when streaming availability allowed a much larger audience to catch up. Viewership surged to nearly six million for the mid‑season premiere and ultimately peaked at over ten million for the series finale. The numbers reflect a show that transformed from a niche cable drama into a full cultural event by its conclusion.
